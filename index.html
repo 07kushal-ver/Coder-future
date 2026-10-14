@@ -1,0 +1,475 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>NEON SNAKE | Cyberpunk</title>
+
+<style>
+* {
+    box-sizing: border-box;
+}
+
+body {
+    margin: 0;
+    min-height: 100vh;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    background: #030712;
+    color: #00ffee;
+    font-family: "Courier New", monospace;
+    overflow-x: hidden;
+}
+
+.game {
+    width: min(95%, 650px);
+    padding: 22px;
+    border: 1px solid #00ffee;
+    border-radius: 18px;
+    background: rgba(5, 12, 32, 0.96);
+    box-shadow: 0 0 25px #00ffee33,
+                0 0 60px #7b2cff22;
+}
+
+h1 {
+    text-align: center;
+    font-size: clamp(25px, 5vw, 38px);
+    letter-spacing: 5px;
+    color: #00ffee;
+    text-shadow: 0 0 15px #00ffee;
+    margin: 0 0 8px;
+}
+
+.subtitle {
+    text-align: center;
+    color: #b06bff;
+    font-size: 12px;
+    margin-bottom: 20px;
+}
+
+.scoreboard {
+    display: flex;
+    justify-content: space-between;
+    gap: 10px;
+    margin-bottom: 12px;
+    font-weight: bold;
+}
+
+.scoreboard span {
+    color: #ff3cac;
+    text-shadow: 0 0 10px #ff3cac;
+}
+
+canvas {
+    display: block;
+    width: 100%;
+    border: 1px solid #793cff;
+    border-radius: 8px;
+    background: #050b1b;
+    box-shadow: 0 0 18px #793cff44;
+    touch-action: none;
+}
+
+.message {
+    text-align: center;
+    min-height: 22px;
+    margin: 12px 0;
+    color: #d8eaff;
+    font-size: 14px;
+}
+
+button {
+    border: 1px solid #00ffee;
+    background: #071b2a;
+    color: #00ffee;
+    padding: 12px 18px;
+    border-radius: 8px;
+    font-family: inherit;
+    font-weight: bold;
+    cursor: pointer;
+    box-shadow: 0 0 12px #00ffee33;
+}
+
+button:hover {
+    background: #00ffee;
+    color: #030712;
+    box-shadow: 0 0 22px #00ffee88;
+}
+
+.controls {
+    display: flex;
+    justify-content: center;
+    gap: 10px;
+    flex-wrap: wrap;
+    margin-top: 12px;
+}
+
+.mobile-controls {
+    display: grid;
+    grid-template-columns: repeat(3, 52px);
+    gap: 7px;
+    justify-content: center;
+    margin-top: 20px;
+}
+
+.mobile-controls button {
+    padding: 12px 0;
+    font-size: 18px;
+}
+
+.mobile-controls .empty {
+    visibility: hidden;
+}
+
+footer {
+    text-align: center;
+    color: #667899;
+    font-size: 11px;
+    margin-top: 20px;
+    letter-spacing: 1px;
+}
+</style>
+</head>
+
+<body>
+
+<div class="game">
+    <h1>NEON SNAKE</h1>
+    <div class="subtitle">✦ CYBER SYSTEM // ONLINE ✦</div>
+
+    <div class="scoreboard">
+        <div>SCORE: <span id="score">0</span></div>
+        <div>LEVEL: <span id="level">1</span></div>
+        <div>BEST: <span id="best">0</span></div>
+    </div>
+
+    <canvas id="board" width="500" height="500"></canvas>
+
+    <div class="message" id="message">
+        Press START GAME to begin
+    </div>
+
+    <div class="controls">
+        <button id="start">START GAME</button>
+        <button id="pause">PAUSE</button>
+        <button id="restart">RESTART</button>
+    </div>
+
+    <div class="mobile-controls">
+        <button class="empty"> </button>
+        <button data-dir="up">▲</button>
+        <button class="empty"> </button>
+        <button data-dir="left">◀</button>
+        <button data-dir="down">▼</button>
+        <button data-dir="right">▶</button>
+    </div>
+
+    <footer>USE ARROW KEYS / WASD • P TO PAUSE</footer>
+</div>
+
+<script>
+const canvas = document.getElementById("board");
+const ctx = canvas.getContext("2d");
+
+const SIZE = 500;
+const CELL = 20;
+const COUNT = SIZE / CELL;
+
+let snake, direction, nextDirection, food;
+let score = 0;
+let best = 0;
+let running = false;
+let paused = false;
+let gameOver = false;
+let timer = null;
+
+try {
+    best = Number(localStorage.getItem("neonSnakeBest")) || 0;
+} catch (e) {}
+
+document.getElementById("best").textContent = best;
+
+function reset() {
+    snake = [
+        {x: 12, y: 12},
+        {x: 11, y: 12},
+        {x: 10, y: 12}
+    ];
+
+    direction = {x: 1, y: 0};
+    nextDirection = {x: 1, y: 0};
+    score = 0;
+    running = false;
+    paused = false;
+    gameOver = false;
+
+    clearInterval(timer);
+    timer = null;
+
+    spawnFood();
+    updateScore();
+    document.getElementById("message").textContent =
+        "Press START GAME to begin";
+    document.getElementById("pause").textContent = "PAUSE";
+
+    draw();
+}
+
+function spawnFood() {
+    do {
+        food = {
+            x: Math.floor(Math.random() * COUNT),
+            y: Math.floor(Math.random() * COUNT)
+        };
+    } while (snake.some(p => p.x === food.x && p.y === food.y));
+}
+
+function updateScore() {
+    document.getElementById("score").textContent = score;
+    document.getElementById("level").textContent =
+        Math.floor(score / 5) + 1;
+    document.getElementById("best").textContent = best;
+}
+
+function startGame() {
+    if (gameOver) reset();
+
+    if (running && !paused) return;
+
+    running = true;
+    paused = false;
+
+    document.getElementById("message").textContent =
+        "SYSTEM ONLINE • COLLECT THE NEON ENERGY";
+    document.getElementById("pause").textContent = "PAUSE";
+
+    schedule();
+}
+
+function schedule() {
+    clearInterval(timer);
+
+    if (!running || paused || gameOver) return;
+
+    const speed = Math.min(160, 110 + score * 2);
+    timer = setInterval(step, 220 - speed);
+}
+
+function togglePause() {
+    if (!running || gameOver) return;
+
+    paused = !paused;
+
+    document.getElementById("pause").textContent =
+        paused ? "RESUME" : "PAUSE";
+
+    document.getElementById("message").textContent =
+        paused ? "SYSTEM PAUSED" : "SYSTEM ONLINE";
+
+    if (paused) {
+        clearInterval(timer);
+    } else {
+        schedule();
+    }
+
+    draw();
+}
+
+function setDirection(dir) {
+    const directions = {
+        up:    {x: 0, y: -1},
+        down:  {x: 0, y: 1},
+        left:  {x: -1, y: 0},
+        right: {x: 1, y: 0}
+    };
+
+    const d = directions[dir];
+    if (!d || gameOver) return;
+
+    if (d.x === -direction.x && d.y === -direction.y) return;
+
+    nextDirection = d;
+
+    if (!running) startGame();
+}
+
+function step() {
+    direction = nextDirection;
+
+    const head = {
+        x: snake[0].x + direction.x,
+        y: snake[0].y + direction.y
+    };
+
+    const eating = head.x === food.x && head.y === food.y;
+
+    if (
+        head.x < 0 || head.x >= COUNT ||
+        head.y < 0 || head.y >= COUNT
+    ) {
+        endGame();
+        return;
+    }
+
+    const body = eating ? snake : snake.slice(0, -1);
+
+    if (body.some(p => p.x === head.x && p.y === head.y)) {
+        endGame();
+        return;
+    }
+
+    snake.unshift(head);
+
+    if (eating) {
+        score++;
+
+        if (score > best) {
+            best = score;
+            try {
+                localStorage.setItem("neonSnakeBest", best);
+            } catch (e) {}
+        }
+
+        spawnFood();
+        updateScore();
+        schedule();
+    } else {
+        snake.pop();
+    }
+
+    draw();
+}
+
+function endGame() {
+    running = false;
+    gameOver = true;
+    clearInterval(timer);
+
+    document.getElementById("message").textContent =
+        "GAME OVER • PRESS RESTART TO PLAY AGAIN";
+
+    draw();
+
+    ctx.fillStyle = "rgba(3, 7, 18, 0.78)";
+    ctx.fillRect(0, 0, SIZE, SIZE);
+
+    ctx.textAlign = "center";
+    ctx.shadowBlur = 20;
+    ctx.shadowColor = "#ff3cac";
+    ctx.fillStyle = "#ff3cac";
+    ctx.font = "bold 35px Courier New";
+    ctx.fillText("GAME OVER", SIZE / 2, SIZE / 2 - 15);
+
+    ctx.shadowBlur = 0;
+    ctx.fillStyle = "#00ffee";
+    ctx.font = "18px Courier New";
+    ctx.fillText("SCORE: " + score, SIZE / 2, SIZE / 2 + 25);
+}
+
+function draw() {
+    ctx.clearRect(0, 0, SIZE, SIZE);
+    ctx.fillStyle = "#050b1b";
+    ctx.fillRect(0, 0, SIZE, SIZE);
+
+    // Cyber grid
+    ctx.strokeStyle = "#10223b";
+    ctx.lineWidth = 1;
+
+    for (let i = 0; i <= SIZE; i += CELL) {
+        ctx.beginPath();
+        ctx.moveTo(i, 0);
+        ctx.lineTo(i, SIZE);
+        ctx.stroke();
+
+        ctx.beginPath();
+        ctx.moveTo(0, i);
+        ctx.lineTo(SIZE, i);
+        ctx.stroke();
+    }
+
+    // Glowing food
+    const fx = food.x * CELL + CELL / 2;
+    const fy = food.y * CELL + CELL / 2;
+
+    ctx.save();
+    ctx.shadowBlur = 22;
+    ctx.shadowColor = "#ff3cac";
+    ctx.fillStyle = "#ff3cac";
+    ctx.beginPath();
+    ctx.arc(fx, fy, 7, 0, Math.PI * 2);
+    ctx.fill();
+
+    ctx.shadowBlur = 5;
+    ctx.fillStyle = "#ffffff";
+    ctx.beginPath();
+    ctx.arc(fx, fy, 3, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.restore();
+
+    // Neon snake
+    snake.forEach((part, index) => {
+        const x = part.x * CELL;
+        const y = part.y * CELL;
+
+        ctx.save();
+        ctx.shadowBlur = index === 0 ? 20 : 9;
+        ctx.shadowColor = index === 0 ? "#ffffff" : "#00ffee";
+        ctx.fillStyle = index === 0 ? "#ffffff" : "#00d9cc";
+
+        ctx.beginPath();
+        ctx.roundRect(x + 2, y + 2, CELL - 4, CELL - 4, 5);
+        ctx.fill();
+
+        if (index === 0) {
+            ctx.fillStyle = "#7b2cff";
+            ctx.shadowBlur = 0;
+            ctx.beginPath();
+            ctx.arc(x + 7, y + 7, 2, 0, Math.PI * 2);
+            ctx.arc(x + 13, y + 7, 2, 0, Math.PI * 2);
+            ctx.fill();
+        }
+
+        ctx.restore();
+    });
+
+    if (!running && !gameOver) {
+        ctx.textAlign = "center";
+        ctx.fillStyle = "#b06bff";
+        ctx.font = "15px Courier New";
+        ctx.fillText("READY TO CONNECT", SIZE / 2, SIZE - 20);
+    }
+}
+
+document.getElementById("start").addEventListener("click", startGame);
+document.getElementById("pause").addEventListener("click", togglePause);
+document.getElementById("restart").addEventListener("click", reset);
+
+document.querySelectorAll("[data-dir]").forEach(button => {
+    button.addEventListener("click", () => {
+        setDirection(button.dataset.dir);
+    });
+});
+
+document.addEventListener("keydown", event => {
+    const keys = {
+        ArrowUp: "up", w: "up", W: "up",
+        ArrowDown: "down", s: "down", S: "down",
+        ArrowLeft: "left", a: "left", A: "left",
+        ArrowRight: "right", d: "right", D: "right"
+    };
+
+    if (keys[event.key]) {
+        event.preventDefault();
+        setDirection(keys[event.key]);
+    }
+
+    if (event.key.toLowerCase() === "p") togglePause();
+});
+
+reset();
+</script>
+
+</body>
+</html>
